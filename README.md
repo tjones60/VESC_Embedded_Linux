@@ -1,15 +1,15 @@
-This is a test project for UART communication between the VESC and a stm32discovery board. Almost the full interface of the VESC is implemented in the example, only firmware upload is missing.  
+This is a project for UART communication between the VESC and a Beaglebone Black.   
   
-Connect PB10 (TX) to RX on the VESC  
-Connect PB11 (RX) to TX on the VESC  
-Connect the grounds between the descovery board and the VESC.  
+Enable UART in /boot/uEnv.txt.  
 
-To upload the project to a discovery board, just connect the USB cable to the programmer USB port and type:  
+APIs can be compiled with either g++ or gcc. If using gcc, change files to .c.
+APIs can also be used with other linux platforms by changing MODEMDEVICE in comm_uart.cpp.
 
-make upload  
-
-Connect the USB port of the discovery board to a computer and run a serial terminal such as screen. Type help to list available commands. Only a few commands are implemented, but more can be added easily in main.c.  
+A console interface is implemented in main.cpp for testing.
   
-I have written a tutorial on how to use and port this code to other platforms here:  
+These APIs are based on the original stm32f4 UART project by vedderb:
+https://github.com/vedderb/bldc_uart_comm_stm32f4_discovery 
+
+He has written a tutorial on how to use and port this code to other platforms here:  
 http://vedder.se/2015/10/communicating-with-the-vesc-using-uart/
 

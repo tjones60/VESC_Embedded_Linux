@@ -15,6 +15,12 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
     */
 
+/*
+*
+* Modified 3/8/2017 by: Ryan Owens
+*  -Added get rotor position function
+*/
+
 #ifndef BLDC_INTERFACE_H_
 #define BLDC_INTERFACE_H_
 
@@ -61,6 +67,7 @@ void bldc_interface_get_appconf(void);
 void bldc_interface_get_decoded_ppm(void);
 void bldc_interface_get_decoded_adc(void);
 void bldc_interface_get_decoded_chuk(void);
+void bldc_interface_get_rotor_pos(void);
 
 // Other functions
 void bldc_interface_detect_motor_param(float current, float min_rpm, float low_duty);
