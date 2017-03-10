@@ -25,6 +25,10 @@
 #ifndef BLDC_INTERFACE_UART_H_
 #define BLDC_INTERFACE_UART_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+	
 // Includes
 #include "packet.h" // For the MAX_PACKET_LEN define
 
@@ -33,4 +37,7 @@ void bldc_interface_uart_init(void(*func)(unsigned char *data, unsigned int len)
 void bldc_interface_uart_process_byte(unsigned char b);
 void bldc_interface_uart_run_timer(void);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* BLDC_INTERFACE_UART_H_ */

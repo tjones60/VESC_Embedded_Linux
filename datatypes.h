@@ -21,6 +21,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
 	PWM_MODE_NONSYNCHRONOUS_HISW = 0, // This mode is not recommended
 	PWM_MODE_SYNCHRONOUS, // The recommended and most tested mode
@@ -389,4 +393,7 @@ typedef enum {
 	COMM_CUSTOM_APP_DATA
 } COMM_PACKET_ID;
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* DATATYPES_H_ */

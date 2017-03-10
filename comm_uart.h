@@ -12,9 +12,16 @@
 #ifndef COMM_UART_H_
 #define COMM_UART_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Functions
 void comm_uart_init(void);
 void comm_uart_close(void);
 int receive_packet(void);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* COMM_UART_H_ */

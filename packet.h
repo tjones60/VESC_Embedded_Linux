@@ -27,6 +27,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Settings
 #define PACKET_RX_TIMEOUT		2
 #define PACKET_HANDLERS			1
@@ -39,4 +43,7 @@ void packet_process_byte(uint8_t rx_data, int handler_num);
 void packet_timerfunc(void);
 void packet_send_packet(unsigned char *data, unsigned int len, int handler_num);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* PACKET_H_ */
