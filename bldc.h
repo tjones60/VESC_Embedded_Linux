@@ -50,12 +50,11 @@ struct RxData {
     int tachometerAbs;
     string faultCode;
 };
-
-// Rx values and position callback functions
-// BLDC interface will call these functions implicitly
-// whenever the appropriate packet is received
-void bldc_val_received(mc_values *val);
-void bldc_pos_received(float pos); // should work after VESC firmware mod
+// Struct used for dynamically allocated motorList
+struct RxMotor {
+	int canId;
+	RxData rxData;
+};
 
 class BLDC {
 public:
@@ -66,6 +65,11 @@ public:
     static void init(char* serialPort);
     // Function to close fd for read/write at end of program
     static void close(void);
+	// Sample data from VESC(s) with non-blocking reads.
+	// Call this function continuously
+	static bool sample_Data();
+	// Returns total number of motor objects
+	static int num_Motors(void);
 
     // Constructor
     BLDC(VescID vescID, Motor_Config motorConfig);
@@ -90,8 +94,6 @@ public:
     void set_Current_Unscaled(float val); // torque control with unmapped ADC values
     void set_Duty_Unscaled(float val); // duty control with unmapped ADC values
     
-	// Request data from VESC
-	void request_Values(void); // rpm, current, voltage, etc.
 	void request_Pos(void); // Won't work without VESC firmware change.
 	
     // Getters
@@ -99,17 +101,17 @@ public:
     float get_Pos(void); // Won't work without VESC firmware change.
     // VESC can send position continuously to BLDC tool
     // but does not respond to request from serial packet.
-    
-	// Function to read data from UART1
-    bool read_Data(void);
 	
-    // Print Rx data to console (for debugging)
+    // Print Rx data to console
     void print_Data(void);
 
 private:
     int id; // CAN Address
-    RxData rxData; // realtime data received from VESC
+    int dataPos; // motorList data vector position
     Motor_Config config; // Individual motor parameters
+	
+	// Request data from VESC
+	static void request_Values(int canId); // rpm, current, voltage, etc.
     
     // Scaling functions
     float scale_To_Float(float val, float min, float max);

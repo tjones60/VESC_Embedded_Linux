@@ -27,14 +27,30 @@
 #include "bldc_interface_uart.h"
 #include <unistd.h>
 #include <stdio.h>
+#include "timers.h" // for receiving data. must compile with -lrt flag.
+#include <vector> // for read data state machine
+
+// Create new timer for reading data
+timer_t* timerid = new_timer();
 
 // Constant declarations
-const RxData zeroRx = {}; // rxData = 0
+const int timerSP = 20; // timer set-point in milliseconds.
+	                    // adjust for frequency of read data.
+	                    // setting too low may cause packets to be dropped.
+                        // 10ms is the lowest I have observed to work
+                        // reliably on beaglebone black.
+const RxData zeroRxData = {}; // rxData = 0
 
 // global variables
-static RxData rxSerial = {}; // raw Serial data
-static bool dataRdy = false; // true indicates that data has been received from Serial 
-                             // but not stored in rxData
+static std::vector<RxMotor> motorList; // dynamic list to receive and store motor data
+static std::vector<RxMotor>::iterator it; // iterator for motorList
+static enum {REQUEST, READ} readMode = REQUEST; // data sampling state-machine
+
+// Rx values and position callback functions
+// BLDC interface will call these functions implicitly
+// whenever the appropriate packet is received
+static void bldc_val_received(mc_values *val);
+static void bldc_pos_received(float pos); // should work after VESC firmware mod
 
 //********************************************************************************
 // Pre: rx_rotor_pos_func callback has been set
@@ -52,27 +68,27 @@ void bldc_pos_received(float pos) {
 //       flag has been set indicating that data is available in buffer.
 //********************************************************************************
 void bldc_val_received(mc_values *val) {
-	// set raw Serial rx struct
-	rxSerial.voltageIn = val->v_in;
-	rxSerial.tempPCB = val->temp_pcb;
-	rxSerial.tempMOS1 = val->temp_mos1;
-	rxSerial.tempMOS2 = val->temp_mos2;
-	rxSerial.tempMOS3 = val->temp_mos3;
-	rxSerial.tempMOS4 = val->temp_mos4;
-	rxSerial.tempMOS5 = val->temp_mos5;
-	rxSerial.tempMOS6 = val->temp_mos6;
-	rxSerial.currentMotor = val->current_motor;
-	rxSerial.currentIn = val->current_in;
-	rxSerial.rpm = val->rpm;
-	rxSerial.duty = val->duty_now;
-	rxSerial.ampHours = val->amp_hours;
-	rxSerial.ampHoursCharged = val->amp_hours_charged;
-	rxSerial.wattHours = val->watt_hours;
-	rxSerial.wattHoursCharged = val->watt_hours_charged;
-	rxSerial.tachometer = val->tachometer;
-	rxSerial.tachometerAbs = val->tachometer_abs;
-	rxSerial.faultCode = bldc_interface_fault_to_string(val->fault_code);
-	dataRdy = true;
+	// set current iteration of motorList rxData from serial data
+	it->rxData.voltageIn = val->v_in;
+	it->rxData.tempPCB = val->temp_pcb;
+	it->rxData.tempMOS1 = val->temp_mos1;
+	it->rxData.tempMOS2 = val->temp_mos2;
+	it->rxData.tempMOS3 = val->temp_mos3;
+	it->rxData.tempMOS4 = val->temp_mos4;
+	it->rxData.tempMOS5 = val->temp_mos5;
+	it->rxData.tempMOS6 = val->temp_mos6;
+	it->rxData.currentMotor = val->current_motor;
+	it->rxData.currentIn = val->current_in;
+	it->rxData.rpm = val->rpm;
+	it->rxData.duty = val->duty_now;
+	it->rxData.ampHours = val->amp_hours;
+	it->rxData.ampHoursCharged = val->amp_hours_charged;
+	it->rxData.wattHours = val->watt_hours;
+	it->rxData.wattHoursCharged = val->watt_hours_charged;
+	it->rxData.tachometer = val->tachometer;
+	it->rxData.tachometerAbs = val->tachometer_abs;
+	it->rxData.faultCode = bldc_interface_fault_to_string(val->fault_code);
+	printf("read\r\n");
 }
 //********************************************************************************
 // Pre: Serial port is enabled
@@ -94,10 +110,54 @@ void BLDC::close() {
 	comm_uart_close();
 }
 //********************************************************************************
+// Pre: None
+// Post: Total Number of BLDC objects is returned.
+//********************************************************************************
+int BLDC::num_Motors(void) {
+	return motorList.size();
+}
+//********************************************************************************
+// Pre: At least one motor object is instantiated
+// Post: Data for all VESCs is sampled from serial port
+//********************************************************************************
+bool BLDC::sample_Data() {
+	bool ret = false;
+	bldc_interface_uart_run_timer();
+	// Non-blocking read state-machine
+	// A state-machine is necessary for multiple VESCs over CAN because
+	// data packets do not identify which controller sent them.
+	// Therefore, a timer based state-machine approach is used to guarantee that 
+	// all of the requested data is available before attempting to read, and then
+	// moving on to the next VESC.
+	switch(readMode) {
+		case REQUEST:
+			request_Values(it->canId); // Send the serial command requesting data from VESC
+			start_timer(timerid, timerSP); 
+			readMode = READ;
+			break;
+		case READ:
+			// If timer SP is reached, read data from serial port
+			if (check_timer(timerid)) {
+				receive_packet();
+				readMode = REQUEST;
+				it++; // move to the next VESC for reading
+				if (it == motorList.end())
+					it = motorList.begin();
+				ret = true;
+			}
+			break;
+	}
+	return ret;
+}
+//********************************************************************************
 // Pre: Serial port is initialized. vescID value is input.
 // Post: Motor object instantiated with ID, zero rxData, and motor config.
 //********************************************************************************
-BLDC::BLDC(VescID vescID, Motor_Config motorConfig) : id(vescID), rxData(zeroRx), config(motorConfig) {
+BLDC::BLDC(VescID vescID, Motor_Config motorConfig) : id(vescID), config(motorConfig) {
+	RxMotor init = {vescID, zeroRxData};
+	dataPos = motorList.size(); // store position in motorList to use for accessing data
+	motorList.push_back(init); // add to motorList with vesc ID and zero data
+	it = motorList.begin(); // reset the motorList iterator to beginning
 }
 //********************************************************************************
 //********************************************************************************
@@ -214,8 +274,8 @@ void BLDC::set_Pos(float pos) {
 // Pre: Rx callback functions have been set.
 // Post: Data has been read from Serial and stored in rxData.
 //********************************************************************************
-void BLDC::request_Values(void) {
-	bldc_interface_set_forward_can(id);
+void BLDC::request_Values(int canId) {
+	bldc_interface_set_forward_can(canId);
 	bldc_interface_get_values();
 }
 //********************************************************************************
@@ -228,27 +288,6 @@ void BLDC::request_Pos(void) {
 	bldc_interface_get_rotor_pos();
 }
 //********************************************************************************
-// Pre: Rx callback functions have been set.
-// Post: Serial Rx buffer has been read for available data. 
-//       If available, data has been read from Serial and stored in raw Serial struct.
-//********************************************************************************
-bool BLDC::read_Data(void) {
-	bool ret = false; // return true if read completes successfully
-	// read data from Serial
-	receive_packet();
-	// if data from Serial is available,
-	// store Serial data in rxData
-	if (dataRdy) {
-		rxData = rxSerial;
-		dataRdy = false; // data has been read. Serial rx no longer rdy for reading
-		rxSerial = zeroRx; // zero out the raw Serial rx data
-		ret = true;
-	}
-	// reset the packet handler in case data did not transfer correctly
-	bldc_interface_uart_run_timer();
-	return ret;
-}
-//********************************************************************************
 // Pre: Motor is spinning and command has not been given before timeout occurs.
 // Post: VESC timer has been reset and motor keeps spinning.
 //********************************************************************************
@@ -257,14 +296,14 @@ void BLDC::send_Alive(void) {
 	bldc_interface_send_alive();
 }
 //********************************************************************************
-// Pre: Motor object initialized.
-// Post: rxData returned as RxData struct.
+// Pre: BLDC object initialized.
+// Post: rxData rof current object returned as RxData struct.
 //********************************************************************************
 RxData BLDC::get_Values(void) {
-	return rxData;
+	return motorList[dataPos].rxData;
 }
 //********************************************************************************
-// Pre: Motor object initialized.
+// Pre: BLDC object initialized.
 // Post: Rotor position returned as float.
 //********************************************************************************
 float BLDC::get_Pos(void) {
@@ -276,25 +315,25 @@ float BLDC::get_Pos(void) {
 //********************************************************************************
 void BLDC::print_Data(void) {
 	printf("\r\n");
-	printf("Input voltage: %.2f V\r\n", rxData.voltageIn);
-	printf("Temp PCB:      %.2f degC\r\n", rxData.tempPCB);
-	printf("Temp MOSFET1:  %.2f degC\r\n", rxData.tempMOS1);
-	printf("Temp MOSFET2:  %.2f degC\r\n", rxData.tempMOS2);
-	printf("Temp MOSFET3:  %.2f degC\r\n", rxData.tempMOS3);
-	printf("Temp MOSFET4:  %.2f degC\r\n", rxData.tempMOS4);
-	printf("Temp MOSFET5:  %.2f degC\r\n", rxData.tempMOS5);
-	printf("Temp MOSFET6:  %.2f degC\r\n", rxData.tempMOS6);
-	printf("Current motor: %.2f A\r\n", rxData.currentMotor);
-	printf("Current in:    %.2f A\r\n", rxData.currentIn);
-	printf("RPM:           %.1f RPM\r\n", rxData.rpm);
-	printf("Duty cycle:    %.1f %%\r\n", rxData.duty);
-	printf("Ah Drawn:      %.4f Ah\r\n", rxData.ampHours);
-	printf("Ah Regen:      %.4f Ah\r\n", rxData.ampHoursCharged);
-	printf("Wh Drawn:      %.4f Wh\r\n", rxData.wattHours);
-	printf("Wh Regen:      %.4f Wh\r\n", rxData.wattHoursCharged);
-	printf("Tacho:         %i counts\r\n", rxData.tachometer);
-	printf("Tacho ABS:     %i counts\r\n", rxData.tachometerAbs);
-	printf("Fault Code:    %s\r\n", rxData.faultCode.c_str());
+	printf("Input voltage: %.2f V\r\n", motorList[dataPos].rxData.voltageIn);
+	printf("Temp PCB:      %.2f degC\r\n", motorList[dataPos].rxData.tempPCB);
+	printf("Temp MOSFET1:  %.2f degC\r\n", motorList[dataPos].rxData.tempMOS1);
+	printf("Temp MOSFET2:  %.2f degC\r\n", motorList[dataPos].rxData.tempMOS2);
+	printf("Temp MOSFET3:  %.2f degC\r\n", motorList[dataPos].rxData.tempMOS3);
+	printf("Temp MOSFET4:  %.2f degC\r\n", motorList[dataPos].rxData.tempMOS4);
+	printf("Temp MOSFET5:  %.2f degC\r\n", motorList[dataPos].rxData.tempMOS5);
+	printf("Temp MOSFET6:  %.2f degC\r\n", motorList[dataPos].rxData.tempMOS6);
+	printf("Current motor: %.2f A\r\n", motorList[dataPos].rxData.currentMotor);
+	printf("Current in:    %.2f A\r\n", motorList[dataPos].rxData.currentIn);
+	printf("RPM:           %.1f RPM\r\n", motorList[dataPos].rxData.rpm);
+	printf("Duty cycle:    %.1f %%\r\n", motorList[dataPos].rxData.duty);
+	printf("Ah Drawn:      %.4f Ah\r\n", motorList[dataPos].rxData.ampHours);
+	printf("Ah Regen:      %.4f Ah\r\n", motorList[dataPos].rxData.ampHoursCharged);
+	printf("Wh Drawn:      %.4f Wh\r\n", motorList[dataPos].rxData.wattHours);
+	printf("Wh Regen:      %.4f Wh\r\n", motorList[dataPos].rxData.wattHoursCharged);
+	printf("Tacho:         %i counts\r\n", motorList[dataPos].rxData.tachometer);
+	printf("Tacho ABS:     %i counts\r\n", motorList[dataPos].rxData.tachometerAbs);
+	printf("Fault Code:    %s\r\n", motorList[dataPos].rxData.faultCode.c_str());
 	printf("\r\n");
 }
 //********************************************************************************

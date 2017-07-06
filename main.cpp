@@ -1,24 +1,17 @@
 // Main program to test UART communication from BBB to VESC
-// Last modified on 3/7/2017 by: Ryan Owens
+// Last modified on 7/4/2017 by: Ryan Owens
 #include <stdio.h>
 #include "bldc.h"
 #include "motortypes.h"
 #include <unistd.h> // for usleep
-#include "timers.h" // for receiving data. must compile with -lrt flag.
-
-static enum {RequestMotor1, ReadMotor1, RequestMotor2, ReadMotor2} readMode = RequestMotor1;
 
 int main(void) {
-	// constants 
-	const int timerSP = 17; // timer set-point in milliseconds.
-	                        // adjust for frequency of read data.
-	                        // setting too low may cause packets to be dropped.
 	// variables
 	int command = 0;
 	int sleep = 3000;
+	int reads = 0;
 	bool decrement = false;
 	bool loop = true;
-	bool read = true;
 	
 	float val = 0;
 	float brake = 0;
@@ -34,12 +27,6 @@ int main(void) {
 	BLDC leftMotor(VESC1, motor1);
 	BLDC rightMotor(VESC2, motor2);
 	
-	// Create new timer for reading data
-	timer_t* timerid = new_timer();
-    if(timerid == NULL) {
-        fprintf(stderr, "Timer creation failed\n");
-        return 1;
-    }
 	// Main loop 
 	while(loop) {
 		printf("Choose a command\n");
@@ -51,6 +38,7 @@ int main(void) {
 		printf("    6 : Sweep position 0-360 degrees\n");
 		printf("    7 : Get values\n");
 		printf("    8 : Send alive\n");
+		printf("    9 : Get Position\n");
 		printf("Other : End\n");
 		printf("Enter a number: ");
 		scanf("%d", &command);
@@ -109,47 +97,23 @@ int main(void) {
 				break;
 			case 7:
 				// Loop through state machine until all reads are finished.
-				// This loop can also be implemented as a thread to read continuously
-				while (read){
-				switch(readMode){
-					case RequestMotor1:
-						leftMotor.request_Values();
-						start_timer(timerid, timerSP);
-						readMode = ReadMotor1;
-						break;
-					case ReadMotor1:
-						if (check_timer(timerid)){
-							leftMotor.read_Data();
-							// Return values for use by application
-							//testData = leftMotor.get_Values();
-							leftMotor.print_Data();
-							readMode = RequestMotor2;
-						}
-						break;
-					case RequestMotor2:
-						rightMotor.request_Values();
-						start_timer(timerid, timerSP);
-						readMode = ReadMotor2;
-						break;
-					case ReadMotor2:
-						if (check_timer(timerid)){
-							rightMotor.read_Data();
-							// Return values for use by application
-							//testData = rightMotor.get_Values();
-							rightMotor.print_Data();
-							readMode = RequestMotor1; // make state-machine circular
-							read = false; // break read loop
-						}
-						break;
-					default:
-						break;
+				// Must call the sample_Data() function continuously, or 
+				// run inside a thread to read continuously
+				// sample_Data() is non-blocking
+				while (reads < BLDC::num_Motors()){
+					if(BLDC::sample_Data())
+						reads++;
 				}
-				}
+				leftMotor.print_Data();
+				rightMotor.print_Data();
 				break;
 			case 8:
 				leftMotor.send_Alive();
 				rightMotor.send_Alive();
 				printf("Alive sent\n\n");
+				break;
+			case 9:
+				leftMotor.request_Pos();
 				break;
 			default:
 				loop = false;
@@ -158,10 +122,9 @@ int main(void) {
 		command = 0;
 		val = 0;
 		brake = 0;
-		read = 1;
+		reads = 0;
 		}
 	leftMotor.apply_Brake(3);
 	rightMotor.apply_Brake(3);
-	delete_timer(timerid);
 	BLDC::close();
 }
