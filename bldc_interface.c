@@ -165,26 +165,22 @@ void bldc_interface_process_packet(unsigned char *data, unsigned int len) {
 
 	case COMM_GET_VALUES:
 		ind = 0;
-		values.temp_mos1 = buffer_get_float16(data, 10.0, &ind);
-		values.temp_mos2 = buffer_get_float16(data, 10.0, &ind);
-		values.temp_mos3 = buffer_get_float16(data, 10.0, &ind);
-		values.temp_mos4 = buffer_get_float16(data, 10.0, &ind);
-		values.temp_mos5 = buffer_get_float16(data, 10.0, &ind);
-		values.temp_mos6 = buffer_get_float16(data, 10.0, &ind);
-		values.temp_pcb = buffer_get_float16(data, 10.0, &ind);
-		values.current_motor = buffer_get_float32(data, 100.0, &ind);
-		values.current_in = buffer_get_float32(data, 100.0, &ind);
-		values.duty_now = buffer_get_float16(data, 1000.0, &ind);
-		values.rpm = buffer_get_float32(data, 1.0, &ind);
-		values.v_in = buffer_get_float16(data, 10.0, &ind);
-		values.amp_hours = buffer_get_float32(data, 10000.0, &ind);
-		values.amp_hours_charged = buffer_get_float32(data, 10000.0, &ind);
-		values.watt_hours = buffer_get_float32(data, 10000.0, &ind);
-		values.watt_hours_charged = buffer_get_float32(data, 10000.0, &ind);
+		values.temp_mos = buffer_get_float16(data, 1e1, &ind);
+		values.temp_motor = buffer_get_float16(data, 1e1, &ind);
+		values.current_motor = buffer_get_float32(data, 1e2, &ind);
+		values.current_in = buffer_get_float32(data, 1e2, &ind);
+		values.id = buffer_get_float32(data, 1e2, &ind);
+		values.iq = buffer_get_float32(data, 1e2, &ind);
+		values.duty_now = buffer_get_float16(data, 1e3, &ind);
+		values.rpm = buffer_get_float32(data, 1e0, &ind);
+		values.v_in = buffer_get_float16(data, 1e1, &ind);
+		values.amp_hours = buffer_get_float32(data, 1e4, &ind);
+		values.amp_hours_charged = buffer_get_float32(data, 1e4, &ind);
+		values.watt_hours = buffer_get_float32(data, 1e4, &ind);
+		values.watt_hours_charged = buffer_get_float32(data, 1e4, &ind);
 		values.tachometer = buffer_get_int32(data, &ind);
 		values.tachometer_abs = buffer_get_int32(data, &ind);
 		values.fault_code = (mc_fault_code)data[ind++];
-
 		if (rx_value_func) {
 			rx_value_func(&values);
 		}

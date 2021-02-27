@@ -1,6 +1,3 @@
-Forking this project to make a web based dashboard for VESC. This README will be eventually updated. Below is the README from the forked project
-------------------------------------------------------------------------
-
 This is a project for serial communication between the VESC and Embedded Linux Devices, such as
 Beaglebone Black and Raspberry Pi. It will also work with any Linux Computer. The provided 
 examples in main.c and main.cpp demonstrate how to use UART1 on Beaglebone Black to 

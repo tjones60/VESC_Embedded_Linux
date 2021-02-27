@@ -20,7 +20,7 @@ int main(void) {
 	RxData testData = {};
 	
 	// Initialize the Serial interface
-	BLDC::init((char*)"/dev/ttyO1");
+	BLDC::init((char*)"/dev/ttyAMA0");
 	
 	// Initialize motor objects
 	// Parameters are defined in motortypes.h

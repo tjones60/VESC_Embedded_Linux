@@ -307,7 +307,7 @@ RxData BLDC::get_Values(void) {
 // Post: Rotor position returned as float.
 //********************************************************************************
 float BLDC::get_Pos(void) {
-	// TODO
+	return 0.0;
 }
 //********************************************************************************
 // Pre: None.
